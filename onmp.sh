@@ -23,7 +23,7 @@ url_WordPress="https://cn.wordpress.org/wordpress-4.9.4-zh_CN.zip"
 url_Owncloud="https://download.owncloud.org/community/owncloud-10.0.10.zip"
 
 # (4) Nextcloud（Owncloud团队的新作，美观强大的个人云盘）
-url_Nextcloud="https://download.nextcloud.com/server/releases/nextcloud-13.0.6.zip"
+url_Nextcloud="https://download.nextcloud.com/server/releases/nextcloud-18.0.3.zip"
 
 # (5) h5ai（优秀的文件目录）
 url_h5ai="https://release.larsjung.de/h5ai/h5ai-0.29.0.zip"
@@ -230,73 +230,90 @@ OOO
 
 # nextcloud
 cat > "/opt/etc/nginx/conf/nextcloud.conf" <<-\OOO
-add_header X-Content-Type-Options nosniff;
-add_header X-XSS-Protection "1; mode=block";
-add_header X-Robots-Tag none;
-add_header X-Download-Options noopen;
-add_header X-Permitted-Cross-Domain-Policies none;
-
-location = /robots.txt {
-    allow all;
-    log_not_found off;
-    access_log off;
-}
-location = /.well-known/carddav {
-    return 301 $scheme://$host/remote.php/dav;
-}
-location = /.well-known/caldav {
-    return 301 $scheme://$host/remote.php/dav;
-}
-
-fastcgi_buffers 64 4K;
-gzip on;
-gzip_vary on;
-gzip_comp_level 4;
-gzip_min_length 256;
-gzip_proxied expired no-cache no-store private no_last_modified no_etag auth;
-gzip_types application/atom+xml application/javascript application/json application/ld+json application/manifest+json application/rss+xml application/vnd.geo+json application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/bmp image/svg+xml image/x-icon text/cache-manifest text/css text/plain text/vcard text/vnd.rim.location.xloc text/vtt text/x-component text/x-cross-domain-policy;
-
-location / {
-    rewrite ^ /index.php$request_uri;
-}
-location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)/ {
-    deny all;
-}
-location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) {
-    deny all;
-}
-
-location ~ ^/(?:index|remote|public|cron|core/ajax/update|status|ocs/v[12]|updater/.+|ocs-provider/.+)\.php(?:$|/) {
-    fastcgi_split_path_info ^(.+?\.php)(/.*)$;
-    include fastcgi_params;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-    fastcgi_param PATH_INFO $fastcgi_path_info;
-    fastcgi_param modHeadersAvailable true;
-    fastcgi_param front_controller_active true;
-    fastcgi_pass unix:/opt/var/run/php7-fpm.sock;
-    fastcgi_intercept_errors on;
-    fastcgi_request_buffering off;
-}
-
-location ~ ^/(?:updater|ocs-provider)(?:$|/) {
-    try_files $uri/ =404;
-    index index.php;
-}
-
-location ~ \.(?:css|js|woff|svg|gif)$ {
-    try_files $uri /index.php$request_uri;
-    add_header Cache-Control "public, max-age=15778463";
     add_header X-Content-Type-Options nosniff;
     add_header X-XSS-Protection "1; mode=block";
     add_header X-Robots-Tag none;
     add_header X-Download-Options noopen;
+    add_header X-Frame-Options "SAMEORIGIN";
     add_header X-Permitted-Cross-Domain-Policies none;
-    access_log off;
-}
-
-location ~ \.(?:png|html|ttf|ico|jpg|jpeg)$ {
-    try_files $uri /index.php$request_uri;
-    access_log off;
+    add_header Referrer-Policy no-referrer;
+    fastcgi_hide_header X-Powered-By;
+    root /config/www/nextcloud/;
+    # display real ip in nginx logs when connected through reverse proxy via docker network
+    set_real_ip_from 172.0.0.0/8;
+    real_ip_header X-Forwarded-For;
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+    location = /.well-known/carddav {
+      return 301 $scheme://$host:$server_port/remote.php/dav;
+    }
+    location = /.well-known/caldav {
+      return 301 $scheme://$host:$server_port/remote.php/dav;
+    }
+    client_max_body_size 10G;
+    fastcgi_buffers 64 4K;
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 4;
+    gzip_min_length 256;
+    gzip_proxied expired no-cache no-store private no_last_modified no_etag auth;
+    gzip_types application/atom+xml application/javascript application/json application/ld+json application/manifest+json application/rss+xml application/vnd.geo+json application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/bmp image/svg+xml image/x-icon text/cache-manifest text/css text/plain text/vcard text/vnd.rim.location.xloc text/vtt text/x-component text/x-cross-domain-policy;
+    location / {
+        rewrite ^ /index.php;
+    }
+    location ~ ^\/(?:build|tests|config|lib|3rdparty|templates|data)\/ {
+        deny all;
+    }
+    location ~ ^\/(?:\.|autotest|occ|issue|indie|db_|console) {
+        deny all;
+    }
+    location ~ ^\/(?:index|remote|public|cron|core\/ajax\/update|status|ocs\/v[12]|updater\/.+|oc[ms]-provider\/.+)\.php(?:$|\/) {
+        fastcgi_split_path_info ^(.+?\.php)(\/.*|)$;
+        set $path_info $fastcgi_path_info;
+        try_files $fastcgi_script_name =404;
+        include /etc/nginx/fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param PATH_INFO $path_info;
+        fastcgi_param HTTPS on;
+        fastcgi_param modHeadersAvailable true;
+        fastcgi_param front_controller_active true;
+        fastcgi_pass php-handler;
+        fastcgi_intercept_errors on;
+        fastcgi_request_buffering off;
+    }
+    location ~ ^\/(?:updater|oc[ms]-provider)(?:$|\/) {
+        try_files $uri/ =404;
+        index index.php;
+    }
+    location ~ \.(?:css|js|woff2?|svg|gif|map)$ {
+        try_files $uri /index.php$request_uri;
+        add_header Cache-Control "public, max-age=15778463";
+        # Add headers to serve security related headers
+        # Before enabling Strict-Transport-Security headers please read into this
+        # topic first.
+        #add_header Strict-Transport-Security "max-age=15768000; includeSubDomains; preload;" always;
+        #
+        # WARNING: Only add the preload option once you read about
+        # the consequences in https://hstspreload.org/. This option
+        # will add the domain to a hardcoded list that is shipped
+        # in all major browsers and getting removed from this list
+        # could take several months.
+        add_header X-Content-Type-Options nosniff;
+        add_header X-XSS-Protection "1; mode=block";
+        add_header X-Robots-Tag none;
+        add_header X-Download-Options noopen;
+        add_header X-Frame-Options "SAMEORIGIN";
+        add_header X-Permitted-Cross-Domain-Policies none;
+        add_header Referrer-Policy no-referrer;
+        access_log off;
+    }
+    location ~ \.(?:png|html|ttf|ico|jpg|jpeg|bcmap)$ {
+        try_files $uri /index.php$request_uri;
+        access_log off;
+    }
 }
 OOO
 
